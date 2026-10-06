@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>24시간 원형 시계 시간표 & 수면 플래너</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- html2canvas for Exporting PNG -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        night: {
+                            950: '#070A12',
+                            900: '#0F172A',
+                            800: '#1E293B',
+                            700: '#334155',
+                        },
+                        sleep: {
+                            glow: '#6366F1',
+                            deep: '#312E81',
+                            light: '#818CF8'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #070A12;
+            color: #F8FAFC;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .clock-shadow {
+            filter: drop-shadow(0 0 25px rgba(99, 102, 241, 0.22));
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #070A12;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366F1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-gray-800/80 sticky top-0 z-50 bg-night-950/80 backdrop-blur-md">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-500 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+                    <i data-lucide="clock" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 via-purple-300 to-cyan-300">
+                        SomnoClock KST 12-24
+                    </h1>
+                    <p class="text-xs text-gray-400 hidden sm:block">상단 12시 정오 기준 · 시계방향 24시간 원형 시간표</p>
+                </div>
+            </div>
+
+            <!-- Header Presets & Export Actions -->
+            <div class="flex items-center space-x-2">
+                <button onclick="applyPreset('standard')" class="px-3 py-1.5 bg-night-800 hover:bg-night-700 border border-gray-700 text-xs font-semibold rounded-lg transition hidden md:inline-flex items-center space-x-1 text-gray-300">
+                    <i data-lucide="bookmark" class="w-3.5 h-3.5 text-indigo-400"></i>
+                    <span>표준 시간표</span>
+                </button>
+                <button onclick="applyPreset('owl')" class="px-3 py-1.5 bg-night-800 hover:bg-night-700 border border-gray-700 text-xs font-semibold rounded-lg transition hidden md:inline-flex items-center space-x-1 text-gray-300">
+                    <i data-lucide="moon" class="w-3.5 h-3.5 text-purple-400"></i>
+                    <span>올빼미형</span>
+                </button>
+                <button onclick="exportToImage()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-md shadow-indigo-600/30 flex items-center space-x-1.5 transition">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>시간표 이미지 저장</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="max-w-6xl mx-auto w-full px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: Circular Clock View & KST Quick Sleep Controls (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col space-y-6">
+            
+            <!-- Realtime KST Quick Sleep Action Card -->
+            <div class="glass-card rounded-2xl p-4 bg-gradient-to-r from-indigo-950/80 via-night-900 to-purple-950/80 border-indigo-500/30 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-2 text-indigo-400 font-bold text-xs uppercase tracking-wider">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400 animate-pulse"></i>
+                        <span>대한민국 실시간(KST) 수면 시간표 연동</span>
+                    </div>
+                    <span id="kstBadge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-indigo-900/60 text-indigo-200 border border-indigo-500/30">
+                        KST UTC+9
+                    </span>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                    <button onclick="sleepNowKST()" class="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center space-x-2">
+                        <i data-lucide="moon-star" class="w-4 h-4"></i>
+                        <span>지금 즉시 수면(7.5h) 설정</span>
+                    </button>
+
+                    <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                        <span class="text-xs text-gray-400">목표 기상:</span>
+                        <input type="time" id="quickWakeTime" value="07:00" class="bg-night-950 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono outline-none">
+                        <button onclick="autoApplySleepCycle()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition whitespace-nowrap">
+                            적용
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 24-Hour Circular Pie Clock SVG Area -->
+            <div id="clockCaptureArea" class="glass-card rounded-2xl p-6 flex flex-col items-center justify-center relative overflow-hidden min-h-[480px]">
+                
+                <!-- Background Ambient Glow -->
+                <div class="absolute w-72 h-72 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <!-- Live Digital Time Header -->
+                <div class="text-center mb-2 z-10">
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                        <div id="clockLiveTime" class="text-2xl font-mono font-bold tracking-wider text-indigo-300">00:00:00</div>
+                    </div>
+                    <div class="text-xs text-gray-400 mt-0.5">상단 = 12시(정오) · 시계방향 진행 · 하단 = 24/00시(자정)</div>
+                </div>
+
+                <!-- SVG Circular Clock Canvas -->
+                <div class="relative w-full max-w-[400px] aspect-square flex items-center justify-center my-2 clock-shadow z-10">
+                    <svg id="circularClockSvg" viewBox="0 0 400 400" class="w-full h-full select-none">
+                        <!-- Clock Outer Base Circle -->
+                        <circle cx="200" cy="200" r="180" fill="#0B1120" stroke="#1E293B" stroke-width="4" />
+
+                        <!-- Dynamic Schedule Sectors -->
+                        <g id="clockSectorsGroup"></g>
+
+                        <!-- Outer Clock Ticks & Hour Labels (12 top, 24/00 bottom) -->
+                        <g id="clockTicksGroup"></g>
+
+                        <!-- Center Hub Text Display -->
+                        <circle cx="200" cy="200" r="48" fill="#0F172A" stroke="#334155" stroke-width="3" />
+                        <g id="centerHubText" text-anchor="middle" dominant-baseline="central">
+                            <text x="200" y="192" fill="#818CF8" font-size="11" font-weight="bold">SomnoClock</text>
+                            <text x="200" y="210" fill="#94A3B8" font-size="10" font-weight="medium" id="centerStatsText">12→24시</text>
+                        </g>
+
+                        <!-- Live KST Current Time Needle (Red Hand) -->
+                        <line id="liveClockHand" x1="200" y1="200" x2="200" y2="25" stroke="#F43F5E" stroke-width="2.5" stroke-linecap="round" />
+                        <circle cx="200" cy="200" r="5" fill="#F43F5E" />
+                    </svg>
+                </div>
+
+                <!-- Overlap Warning Indicator -->
+                <div id="overlapWarning" class="hidden text-xs text-amber-400 bg-amber-950/60 border border-amber-500/30 px-3 py-1.5 rounded-xl flex items-center space-x-1.5 mt-1 z-10">
+                    <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                    <span>일부 일과 시간이 서로 겹쳐 있습니다.</span>
+                </div>
+
+                <!-- Tip Footer -->
+                <div class="mt-2 text-center text-xs text-gray-400 z-10 flex items-center space-x-1.5">
+                    <i data-lucide="info" class="w-4 h-4 text-indigo-400"></i>
+                    <span>시간표 조각을 클릭하여 간편하게 일과 내용을 수정할 수 있습니다.</span>
+                </div>
+            </div>
+
+            <!-- Category Summary Stats -->
+            <div class="glass-card rounded-2xl p-5 space-y-3">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>카테고리별 수면 및 일과 요약</span>
+                    <span id="totalAllocatedHours" class="text-indigo-400 font-mono">총 24시간 중 0시간</span>
+                </h3>
+                <div id="categorySummaryGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <!-- Dynamic Summary Chips -->
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: Schedule Form & List Manager (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+
+            <!-- Add/Edit Form Card -->
+            <div class="glass-card rounded-2xl p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <h2 id="formTitle" class="text-base font-bold text-gray-100 flex items-center space-x-2">
+                        <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i>
+                        <span>시간표 조각 추가</span>
+                    </h2>
+                    <button id="cancelEditBtn" onclick="resetForm()" class="text-xs text-gray-400 hover:text-white hidden">
+                        취소
+                    </button>
+                </div>
+
+                <form id="scheduleForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                    <input type="hidden" id="editItemId" value="">
+
+                    <!-- Task Name -->
+                    <div>
+                        <label for="itemName" class="block text-xs font-semibold text-gray-400 mb-1">일과 이름</label>
+                        <input type="text" id="itemName" required placeholder="예: 숙면, 오전 핵심 업무, 저녁 운동"
+                            class="w-full bg-night-950 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none transition">
+                    </div>
+
+                    <!-- Category & Color Select -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="itemCategory" class="block text-xs font-semibold text-gray-400 mb-1">카테고리</label>
+                            <select id="itemCategory" onchange="autoSetCategoryColor()" class="w-full bg-night-950 border border-gray-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-white outline-none">
+                                <option value="수면" data-color="#4F46E5">🌙 수면 시간</option>
+                                <option value="공부/업무" data-color="#0284C7">💻 공부 / 업무</option>
+                                <option value="식사" data-color="#F59E0B">🍽️ 식사</option>
+                                <option value="운동" data-color="#10B981">🏃 운동</option>
+                                <option value="휴식/자유" data-color="#EC4899">☕ 휴식 / 자유시간</option>
+                                <option value="기타" data-color="#6B7280">📌 기타일과</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="itemColor" class="block text-xs font-semibold text-gray-400 mb-1">표시 색상</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="color" id="itemColor" value="#4F46E5" class="w-10 h-9 bg-night-950 border border-gray-700 rounded-lg cursor-pointer p-0.5">
+                                <span id="colorHexText" class="text-xs font-mono text-gray-400">#4F46E5</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Time Picker Range -->
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 mb-1">시간 범위 (24시간 기준)</label>
+                        <div class="grid grid-cols-2 gap-2 items-center">
+                            <div>
+                                <span class="text-[10px] text-gray-500 block mb-0.5">시작 시각</span>
+                                <input type="time" id="startTime" required value="23:30" class="w-full bg-night-950 border border-gray-700 focus:border-indigo-500 rounded-xl p-2.5 text-xs text-white font-mono outline-none">
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-gray-500 block mb-0.5">종료 시각</span>
+                                <input type="time" id="endTime" required value="07:00" class="w-full bg-night-950 border border-gray-700 focus:border-indigo-500 rounded-xl p-2.5 text-xs text-white font-mono outline-none">
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-1">* 종료 시각이 시작 시각보다 작으면 자정을 넘어 익일까지 이어집니다.</p>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" id="submitFormBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span id="submitBtnText">시간표 조각 추가</span>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Schedule Items Dynamic List -->
+            <div class="glass-card rounded-2xl p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-base font-bold text-gray-100 flex items-center space-x-2">
+                        <i data-lucide="list-todo" class="w-5 h-5 text-purple-400"></i>
+                        <span>등록된 일과 목록</span>
+                    </h2>
+                    <button onclick="clearAllItems()" class="text-xs text-gray-500 hover:text-rose-400 transition">
+                        전체 삭제
+                    </button>
+                </div>
+
+                <div id="scheduleItemsContainer" class="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                    <!-- Dynamic Items -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-800 py-4 text-center text-xs text-gray-500">
+        <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <span>© 2026 SomnoClock KST - 12시(정오) 상단 기준 24시간 원형 시계 시간표</span>
+            <span class="text-gray-600">대한민국 표준시(KST) 실시간 바늘 계산기 연동</span>
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * CLOCK GEOMETRY & ANGLE CONVERSION RULES:
+         * 1. Total 24 hours = 360 degrees. 1 hour = 15 degrees.
+         * 2. Top position (12:00 Noon / 12시) = -90 degrees (or 270 degrees).
+         * 3. Moving Clockwise:
+         *    - 12시 (Noon) = -90° (Top)
+         *    - 15시 (오후 3시) = -45°
+         *    - 18시 (오후 6시) = 0° (Right)
+         *    - 21시 (오후 9시) = 45°
+         *    - 24/00시 (자정) = 90° (Bottom)
+         *    - 03시 (새벽 3시) = 135°
+         *    - 06시 (오전 6시) = 180° (Left)
+         *    - 09시 (오전 9시) = 225° / -135°
+         */
+
+        const DEFAULT_SCHEDULE = [
+            { id: '1', name: '숙면 (5주기 / 7.5h)', category: '수면', startTime: '23:30', endTime: '07:00', color: '#4F46E5' },
+            { id: '2', name: '아침 식사 & 준비', category: '식사', startTime: '07:00', endTime: '08:30', color: '#F59E0B' },
+            { id: '3', name: '오전 핵심 업무/공부', category: '공부/업무', startTime: '09:00', endTime: '12:00', color: '#0284C7' },
+            { id: '4', name: '점심 식사 & 산책', category: '식사', startTime: '12:00', endTime: '13:00', color: '#F59E0B' },
+            { id: '5', name: '오후 프로젝트 업무', category: '공부/업무', startTime: '13:00', endTime: '18:00', color: '#0284C7' },
+            { id: '6', name: '저녁 식사', category: '식사', startTime: '18:30', endTime: '19:30', color: '#F59E0B' },
+            { id: '7', name: '저녁 운동', category: '운동', startTime: '20:00', endTime: '21:00', color: '#10B981' },
+            { id: '8', name: '자유시간 & 취침 준비', category: '휴식/자유', startTime: '21:00', endTime: '23:30', color: '#EC4899' }
+        ];
+
+        let items = [];
+        let editingId = null;
+
+        window.onload = function() {
+            lucide.createIcons();
+            loadSchedule();
+            initClockTicks();
+            startLiveClockHand();
+            renderClock();
+            renderList();
+            renderSummary();
+
+            document.getElementById('itemColor').addEventListener('input', (e) => {
+                document.getElementById('colorHexText').innerText = e.target.value;
+            });
+        };
+
+        // LocalStorage Logic
+        function loadSchedule() {
+            const saved = localStorage.getItem('somnoclock_kst_12_24_items');
+            if (saved) {
+                try {
+                    items = JSON.parse(saved);
+                } catch(e) {
+                    items = [...DEFAULT_SCHEDULE];
+                }
+            } else {
+                items = [...DEFAULT_SCHEDULE];
+            }
+        }
+
+        function saveSchedule() {
+            localStorage.setItem('somnoclock_kst_12_24_items', JSON.stringify(items));
+            renderClock();
+            renderList();
+            renderSummary();
+            checkOverlaps();
+        }
+
+        // Convert Time String (HH:MM) to total minutes from 12:00 Noon
+        // 12:00 = 0 mins, 13:00 = 60 mins ... 24:00/00:00 = 720 mins ... 11:59 = 1439 mins
+        function timeToMinutesFromNoon(timeStr) {
+            const [h, m] = timeStr.split(':').map(Number);
+            // shift relative to 12:00 Noon
+            let mins = (h - 12) * 60 + m;
+            if (mins < 0) mins += 1440; // 00:00~11:59 falls into second half
+            return mins;
+        }
+
+        function minutesToAngle(minsFromNoon) {
+            // 0 mins = -90° (Top, 12 o'clock position)
+            return (minsFromNoon / 1440) * 360 - 90;
+        }
+
+        // Render Clock Ticks & Hour Dial Labels (12 Top, 13, 14, ... 24/00 Bottom, ... 11)
+        function initClockTicks() {
+            const ticksGroup = document.getElementById('clockTicksGroup');
+            ticksGroup.innerHTML = '';
+
+            const cx = 200, cy = 200, rOuter = 180, rInnerTick = 170, rText = 152;
+
+            // Hour numbers sequence starting from 12 at top
+            // 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24/00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11
+            for (let i = 0; i < 24; i++) {
+                const hourVal = (12 + i) % 24;
+                const angleDeg = (i / 24) * 360 - 90;
+                const rad = angleDeg * (Math.PI / 180);
+
+                const x1 = cx + rOuter * Math.cos(rad);
+                const y1 = cy + rOuter * Math.sin(rad);
+                const x2 = cx + rInnerTick * Math.cos(rad);
+                const y2 = cy + rInnerTick * Math.sin(rad);
+
+                // Tick mark line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x1);
+                line.setAttribute('y1', y1);
+                line.setAttribute('x2', x2);
+                line.setAttribute('y2', y2);
+                line.setAttribute('stroke', i % 3 === 0 ? '#64748B' : '#1E293B');
+                line.setAttribute('stroke-width', i % 3 === 0 ? '2' : '1');
+                ticksGroup.appendChild(line);
+
+                // Hour Number Text
+                const tx = cx + rText * Math.cos(rad);
+                const ty = cy + rText * Math.sin(rad);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', tx);
+                text.setAttribute('y', ty);
+                
+                // Highlight 12 (Noon - Top) and 24/00 (Midnight - Bottom)
+                if (hourVal === 12) {
+                    text.setAttribute('fill', '#38BDF8'); // Cyan highlight for Noon
+                    text.setAttribute('font-size', '11');
+                    text.setAttribute('font-weight', 'bold');
+                    text.textContent = '12시';
+                } else if (hourVal === 0) {
+                    text.setAttribute('fill', '#818CF8'); // Indigo highlight for Midnight
+                    text.setAttribute('font-size', '11');
+                    text.setAttribute('font-weight', 'bold');
+                    text.textContent = '24/00';
+                } else {
+                    text.setAttribute('fill', '#94A3B8');
+                    text.setAttribute('font-size', '9');
+                    text.setAttribute('font-weight', 'medium');
+                    text.textContent = String(hourVal).padStart(2, '0');
+                }
+
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('dominant-baseline', 'central');
+                ticksGroup.appendChild(text);
+            }
+        }
+
+        function createArcPath(cx, cy, rIn, rOut, startAngleDeg, endAngleDeg) {
+            let sweep = endAngleDeg - startAngleDeg;
+            if (sweep < 0) sweep += 360;
+
+            const startRad = startAngleDeg * (Math.PI / 180);
+            const endRad = endAngleDeg * (Math.PI / 180);
+
+            const x1_out = cx + rOut * Math.cos(startRad);
+            const y1_out = cy + rOut * Math.sin(startRad);
+            const x2_out = cx + rOut * Math.cos(endRad);
+            const y2_out = cy + rOut * Math.sin(endRad);
+
+            const x1_in = cx + rIn * Math.cos(endRad);
+            const y1_in = cy + rIn * Math.sin(endRad);
+            const x2_in = cx + rIn * Math.cos(startRad);
+            const y2_in = cy + rIn * Math.sin(startRad);
+
+            const largeArcFlag = sweep > 180 ? 1 : 0;
+
+            return [
+                `M ${x1_out} ${y1_out}`,
+                `A ${rOut} ${rOut} 0 ${largeArcFlag} 1 ${x2_out} ${y2_out}`,
+                `L ${x1_in} ${y1_in}`,
+                `A ${rIn} ${rIn} 0 ${largeArcFlag} 0 ${x2_in} ${y2_in}`,
+                'Z'
+            ].join(' ');
+        }
+
+        // Render Circular Pie Clock Sectors
+        function renderClock() {
+            const group = document.getElementById('clockSectorsGroup');
+            group.innerHTML = '';
+
+            const cx = 200, cy = 200, rIn = 60, rOut = 140;
+
+            items.forEach((item) => {
+                const startMins = timeToMinutesFromNoon(item.startTime);
+                let endMins = timeToMinutesFromNoon(item.endTime);
+                if (endMins <= startMins) endMins += 1440;
+
+                const startAngle = minutesToAngle(startMins);
+                const endAngle = minutesToAngle(endMins);
+
+                const pathString = createArcPath(cx, cy, rIn, rOut, startAngle, endAngle);
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('class', 'clock-sector group hover:opacity-90 cursor-pointer');
+                g.onclick = () => editItem(item.id);
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathString);
+                path.setAttribute('fill', item.color);
+                path.setAttribute('opacity', item.category === '수면' ? '0.85' : '0.75');
+                path.setAttribute('stroke', '#0F172A');
+                path.setAttribute('stroke-width', '2');
+
+                if (item.category === '수면') {
+                    path.setAttribute('filter', 'drop-shadow(0 0 8px rgba(99, 102, 241, 0.4))');
+                }
+
+                g.appendChild(path);
+
+                // Sector Text Label Position Calculation
+                let sweepAngle = endAngle - startAngle;
+                if (sweepAngle < 0) sweepAngle += 360;
+                const midAngle = startAngle + sweepAngle / 2;
+                const midRad = midAngle * (Math.PI / 180);
+                const rLabel = (rIn + rOut) / 2;
+
+                const tx = cx + rLabel * Math.cos(midRad);
+                const ty = cy + rLabel * Math.sin(midRad);
+
+                const durationMins = endMins - startMins;
+                if (durationMins >= 40) {
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', tx);
+                    text.setAttribute('y', ty);
+                    text.setAttribute('fill', '#FFFFFF');
+                    text.setAttribute('font-size', durationMins >= 120 ? '11' : '9');
+                    text.setAttribute('font-weight', 'bold');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('dominant-baseline', 'central');
+                    text.setAttribute('pointer-events', 'none');
+                    text.textContent = item.name;
+                    g.appendChild(text);
+                }
+
+                group.appendChild(g);
+            });
+        }
+
+        // Real-Time KST Clock Needle Calculation
+        function startLiveClockHand() {
+            updateLiveHand();
+            setInterval(updateLiveHand, 1000);
+        }
+
+        function getKSTDate() {
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            return new Date(utc + (360 * 60000)); // UTC+9
+        }
+
+        function updateLiveHand() {
+            const kst = getKSTDate();
+            const h = kst.getHours();
+            const m = kst.getMinutes();
+            const s = kst.getSeconds();
+
+            const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            document.getElementById('clockLiveTime').innerText = timeString;
+
+            // Calculate current angle based on 12:00 Noon top orientation
+            const currentMinsFromNoon = timeToMinutesFromNoon(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`) + s / 60;
+            const angleDeg = minutesToAngle(currentMinsFromNoon);
+            const rad = angleDeg * (Math.PI / 180);
+
+            const cx = 200, cy = 200, rHand = 175;
+            const x2 = cx + rHand * Math.cos(rad);
+            const y2 = cy + rHand * Math.sin(rad);
+
+            const hand = document.getElementById('liveClockHand');
+            if (hand) {
+                hand.setAttribute('x2', x2);
+                hand.setAttribute('y2', y2);
+            }
+        }
+
+        // SLEEP CALCULATIONS & ACTIONS
+        function sleepNowKST() {
+            const kst = getKSTDate();
+            const nowH = kst.getHours();
+            const nowM = kst.getMinutes();
+
+            const startTimeStr = `${String(nowH).padStart(2, '0')}:${String(nowM).padStart(2, '0')}`;
+
+            // Calculate wake time: current KST + 15m (falling asleep) + 7.5 hours (5 sleep cycles) = +465 minutes
+            let wakeDate = new Date(kst.getTime());
+            wakeDate.setMinutes(wakeDate.getMinutes() + 465);
+
+            const wakeH = String(wakeDate.getHours()).padStart(2, '0');
+            const wakeM = String(wakeDate.getMinutes()).padStart(2, '0');
+            const wakeTimeStr = `${wakeH}:${wakeM}`;
+
+            // Replace existing sleep items with new KST real-time sleep block
+            items = items.filter(item => item.category !== '수면');
+            items.push({
+                id: Date.now().toString(),
+                name: 'KST 즉시 수면 (7.5시간)',
+                category: '수면',
+                startTime: startTimeStr,
+                endTime: wakeTimeStr,
+                color: '#4F46E5'
+            });
+
+            saveSchedule();
+            alert(`대한민국 실시간 KST (${startTimeStr}) 기준 5주기 수면 블록이 적용되었습니다!\n권장 기상 시각: ${wakeTimeStr} (총 7.5시간 수면)`);
+        }
+
+        function autoApplySleepCycle() {
+            const wakeTime = document.getElementById('quickWakeTime').value;
+            if (!wakeTime) return;
+
+            const [wH, wM] = wakeTime.split(':').map(Number);
+            let wakeDate = new Date();
+            wakeDate.setHours(wH, wM, 0, 0);
+
+            let bedDate = new Date(wakeDate.getTime());
+            bedDate.setMinutes(bedDate.getMinutes() - (7 * 60 + 45)); // -7h 45m
+
+            const bH = String(bedDate.getHours()).padStart(2, '0');
+            const bM = String(bedDate.getMinutes()).padStart(2, '0');
+            const bedTimeStr = `${bH}:${bM}`;
+
+            items = items.filter(item => item.category !== '수면');
+            items.push({
+                id: Date.now().toString(),
+                name: '맞춤 숙면 (7.5시간)',
+                category: '수면',
+                startTime: bedTimeStr,
+                endTime: wakeTime,
+                color: '#4F46E5'
+            });
+
+            saveSchedule();
+            alert(`수면 블록 적용 완료!\n목표 기상: ${wakeTime} → 권장 취침 시각: ${bedTimeStr}`);
+        }
+
+        function autoSetCategoryColor() {
+            const select = document.getElementById('itemCategory');
+            const selectedOpt = select.options[select.selectedIndex];
+            const defaultColor = selectedOpt.getAttribute('data-color');
+            if (defaultColor) {
+                document.getElementById('itemColor').value = defaultColor;
+                document.getElementById('colorHexText').innerText = defaultColor;
+            }
+        }
+
+        // Overlap Warning Logic
+        function checkOverlaps() {
+            let hasOverlap = false;
+            const timeRanges = items.map(item => {
+                const s = timeToMinutesFromNoon(item.startTime);
+                let e = timeToMinutesFromNoon(item.endTime);
+                if (e <= s) e += 1440;
+                return { s, e };
+            });
+
+            for (let i = 0; i < timeRanges.length; i++) {
+                for (let j = i + 1; j < timeRanges.length; j++) {
+                    const r1 = timeRanges[i];
+                    const r2 = timeRanges[j];
+                    if (Math.max(r1.s, r2.s) < Math.min(r1.e, r2.e)) {
+                        hasOverlap = true;
+                        break;
+                    }
+                }
+                if (hasOverlap) break;
+            }
+
+            const warningEl = document.getElementById('overlapWarning');
+            if (warningEl) {
+                if (hasOverlap) warningEl.classList.remove('hidden');
+                else warningEl.classList.add('hidden');
+            }
+        }
+
+        // CRUD FORM LOGIC
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('itemName').value.trim();
+            const category = document.getElementById('itemCategory').value;
+            const color = document.getElementById('itemColor').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+
+            if (startTime === endTime) {
+                alert('시작 시각과 종료 시각이 동일합니다.');
+                return;
+            }
+
+            if (editingId) {
+                items = items.map(item => item.id === editingId ? 
+                    { ...item, name, category, color, startTime, endTime } : item);
+                editingId = null;
+            } else {
+                items.push({
+                    id: Date.now().toString(),
+                    name,
+                    category,
+                    color,
+                    startTime,
+                    endTime
+                });
+            }
+
+            saveSchedule();
+            resetForm();
+        }
+
+        function editItem(id) {
+            const item = items.find(i => i.id === id);
+            if (!item) return;
+
+            editingId = item.id;
+            document.getElementById('editItemId').value = item.id;
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemCategory').value = item.category;
+            document.getElementById('itemColor').value = item.color;
+            document.getElementById('colorHexText').innerText = item.color;
+            document.getElementById('startTime').value = item.startTime;
+            document.getElementById('endTime').value = item.endTime;
+
+            document.getElementById('formTitle').innerHTML = `
+                <i data-lucide="edit-3" class="w-5 h-5 text-indigo-400"></i>
+                <span>시간표 조각 수정</span>
+            `;
+            document.getElementById('submitBtnText').innerText = '수정사항 저장';
+            document.getElementById('cancelEditBtn').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function deleteItem(id) {
+            items = items.filter(i => i.id !== id);
+            saveSchedule();
+            if (editingId === id) resetForm();
+        }
+
+        function clearAllItems() {
+            if (confirm('전체 시간표를 비우시겠습니까?')) {
+                items = [];
+                saveSchedule();
+                resetForm();
+            }
+        }
+
+        function resetForm() {
+            editingId = null;
+            document.getElementById('scheduleForm').reset();
+            document.getElementById('editItemId').value = '';
+            document.getElementById('formTitle').innerHTML = `
+                <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i>
+                <span>시간표 조각 추가</span>
+            `;
+            document.getElementById('submitBtnText').innerText = '시간표 조각 추가';
+            document.getElementById('cancelEditBtn').classList.add('hidden');
+            autoSetCategoryColor();
+            lucide.createIcons();
+        }
+
+        function renderList() {
+            const container = document.getElementById('scheduleItemsContainer');
+            if (!container) return;
+
+            if (items.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500 text-xs">
+                        등록된 일과가 없습니다. 위 입력창에서 일과를 등록해주세요.
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort by start time from 12:00 Noon
+            const sorted = [...items].sort((a, b) => timeToMinutesFromNoon(a.startTime) - timeToMinutesFromNoon(b.startTime));
+
+            container.innerHTML = sorted.map(item => {
+                const sMins = timeToMinutesFromNoon(item.startTime);
+                let eMins = timeToMinutesFromNoon(item.endTime);
+                if (eMins <= sMins) eMins += 1440;
+                const durationHrs = ((eMins - sMins) / 60).toFixed(1);
+
+                return `
+                    <div class="p-3 rounded-xl bg-night-950 border border-gray-800 flex items-center justify-between hover:border-gray-700 transition">
+                        <div class="flex items-center space-x-3">
+                            <span class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color: ${item.color}"></span>
+                            <div>
+                                <div class="text-xs font-bold text-white">${item.name}</div>
+                                <div class="text-[11px] text-gray-400 font-mono">
+                                    ${item.startTime} ~ ${item.endTime} (${durationHrs}시간)
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button onclick="editItem('${item.id}')" class="p-1.5 text-gray-400 hover:text-indigo-300 transition">
+                                <i data-lucide="edit-2" class="w-4 h-4"></i>
+                            </button>
+                            <button onclick="deleteItem('${item.id}')" class="p-1.5 text-gray-400 hover:text-rose-400 transition">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function renderSummary() {
+            const summaryGrid = document.getElementById('categorySummaryGrid');
+            const totalText = document.getElementById('totalAllocatedHours');
+
+            const categoryTotals = {};
+            let grandTotalMins = 0;
+
+            items.forEach(item => {
+                const sMins = timeToMinutesFromNoon(item.startTime);
+                let eMins = timeToMinutesFromNoon(item.endTime);
+                if (eMins <= sMins) eMins += 1440;
+                const dur = eMins - sMins;
+
+                categoryTotals[item.category] = (categoryTotals[item.category] || 0) + dur;
+                grandTotalMins += dur;
+            });
+
+            const grandHours = (grandTotalMins / 60).toFixed(1);
+            totalText.innerText = `총 24시간 중 ${grandHours}시간 설정됨`;
+
+            const categories = [
+                { name: '수면', icon: '🌙', color: 'border-indigo-500/30 bg-indigo-950/30' },
+                { name: '공부/업무', icon: '💻', color: 'border-sky-500/30 bg-sky-950/30' },
+                { name: '식사', icon: '🍽️', color: 'border-amber-500/30 bg-amber-950/30' },
+                { name: '운동', icon: '🏃', color: 'border-emerald-500/30 bg-emerald-950/30' },
+                { name: '휴식/자유', icon: '☕', color: 'border-pink-500/30 bg-pink-950/30' },
+                { name: '기타', icon: '📌', color: 'border-gray-500/30 bg-gray-950/30' }
+            ];
+
+            summaryGrid.innerHTML = categories.map(cat => {
+                const mins = categoryTotals[cat.name] || 0;
+                const hrs = (mins / 60).toFixed(1);
+                return `
+                    <div class="p-2.5 rounded-xl border ${cat.color} flex items-center justify-between">
+                        <span class="text-xs text-gray-300 font-medium">${cat.icon} ${cat.name}</span>
+                        <span class="text-xs font-bold font-mono text-white">${hrs}시간</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function applyPreset(type) {
+            if (type === 'standard') {
+                items = [...DEFAULT_SCHEDULE];
+            } else if (type === 'owl') {
+                items = [
+                    { id: '1', name: '올빼미 수면 (7.5시간)', category: '수면', startTime: '02:00', endTime: '09:30', color: '#4F46E5' },
+                    { id: '2', name: '늦은 아침 & 준비', category: '식사', startTime: '09:30', endTime: '10:30', color: '#F59E0B' },
+                    { id: '3', name: '오전/오후 작업', category: '공부/업무', startTime: '10:30', endTime: '18:00', color: '#0284C7' },
+                    { id: '4', name: '저녁 식사', category: '식사', startTime: '18:30', endTime: '19:30', color: '#F59E0B' },
+                    { id: '5', name: '야간 몰입 공부', category: '공부/업무', startTime: '20:00', endTime: '01:00', color: '#0284C7' },
+                    { id: '6', name: '취침 전 휴식', category: '휴식/자유', startTime: '01:00', endTime: '02:00', color: '#EC4899' }
+                ];
+            }
+            saveSchedule();
+            resetForm();
+        }
+
+        function exportToImage() {
+            const captureArea = document.getElementById('clockCaptureArea');
+            if (!captureArea) return;
+
+            html2canvas(captureArea, {
+                backgroundColor: '#070A12',
+                scale: 2
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `SomnoClock_24H_NoonTop_${new Date().toISOString().slice(0,10)}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>
